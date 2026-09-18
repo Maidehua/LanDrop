@@ -3,9 +3,6 @@ name: Build
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/build.yml'
 
 jobs:
   windows:
