@@ -19,13 +19,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 
 class MainActivity:ComponentActivity(){
-    private lateinit var discovery:DiscoveryService; private lateinit var server:FileServer
-    override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);discovery=DiscoveryService(this);server=FileServer(this);server.start();discovery.start();setContent{MaterialTheme(colorScheme=lightColorScheme(primary=Color(0xFF376CF6),background=Color(0xFFF5F7FB))){App(discovery)}}}
-    override fun onDestroy(){discovery.stop();server.stop();super.onDestroy()}
+    private var discovery:DiscoveryService?=null; private var server:FileServer?=null
+    override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);var startupError:String?=null;try{server=FileServer(this).also{it.start()}}catch(t:Throwable){startupError="接收服务启动失败：${t.message}"};try{discovery=DiscoveryService(this).also{it.start()}}catch(t:Throwable){startupError=listOfNotNull(startupError,"设备发现启动失败：${t.message}").joinToString("；")};setContent{MaterialTheme(colorScheme=lightColorScheme(primary=Color(0xFF376CF6),background=Color(0xFFF5F7FB))){App(discovery,startupError)}}}
+    override fun onDestroy(){discovery?.stop();server?.stop();super.onDestroy()}
 }
 
-@Composable private fun ComponentActivity.App(discovery:DiscoveryService){
-    val peers by discovery.peers.collectAsStateWithLifecycle(); var target by remember{mutableStateOf<Peer?>(null)};var ip by remember{mutableStateOf("")};var status by remember{mutableStateOf("接收服务已启动")};var busy by remember{mutableStateOf(false)};val scope=rememberCoroutineScope()
+@Composable private fun ComponentActivity.App(discovery:DiscoveryService?,startupError:String?){
+    val peers by (discovery?.peers ?: remember{ kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }).collectAsStateWithLifecycle(); var target by remember{mutableStateOf<Peer?>(null)};var ip by remember{mutableStateOf("")};var status by remember{mutableStateOf(startupError?:"接收服务已启动")};var busy by remember{mutableStateOf(false)};val scope=rememberCoroutineScope()
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()){uris->val peer=target;if(peer!=null&&uris.isNotEmpty())scope.launch{busy=true;try{uris.forEachIndexed{i,u->status="正在发送 ${i+1}/${uris.size}";FileSender.send(this@App,peer,u)};status="发送完成，共 ${uris.size} 个文件"}catch(e:Exception){status="发送失败：${e.message}"}finally{busy=false}}}
     Surface(Modifier.fillMaxSize(),color=MaterialTheme.colorScheme.background){Column(Modifier.fillMaxSize().padding(22.dp)){
         Text("LanDrop",fontSize=30.sp);Text("本机 IP：${NetworkInfo.localIpv4()?:"未知"}",color=Color.Gray);Spacer(Modifier.height(18.dp))
