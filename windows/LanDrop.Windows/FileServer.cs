@@ -25,6 +25,16 @@ public sealed class FileServer(string receiveDirectory) : IDisposable
             await using (var output = File.Create(path)) await upload.CopyToAsync(output);
             return Results.Json(new { ok=true, name=Path.GetFileName(path), size=upload.Length }, statusCode:201);
         });
+        _app.MapPost("/api/files/raw", async (HttpRequest request) => {
+            var encoded = request.Headers["X-File-Name-B64"].FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(encoded)) return Results.BadRequest(new { ok=false, error="missing filename" });
+            string decoded;
+            try { decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encoded)); }
+            catch { return Results.BadRequest(new { ok=false, error="invalid filename" }); }
+            var path = UniquePath(receiveDirectory, Sanitize(Path.GetFileName(decoded)));
+            await using (var output = File.Create(path)) await request.Body.CopyToAsync(output);
+            return Results.Json(new { ok=true, name=Path.GetFileName(path), size=new FileInfo(path).Length }, statusCode:201);
+        });
         await _app.StartAsync();
     }
     private static string Sanitize(string name) { foreach (var c in Path.GetInvalidFileNameChars()) name=name.Replace(c,'_'); return string.IsNullOrWhiteSpace(name)?"file.bin":name; }
